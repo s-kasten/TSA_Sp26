@@ -88,7 +88,9 @@ A plot of observed values over time is the first thing you do to start understan
 
 ```{r}
 #using package ggplot2
-ggplot()
+ggplot(inflow_data, aes(x=my_date, y=HP1))+
+  geom_line()
+
 
 #adding two time series to the same plot
 
@@ -102,7 +104,7 @@ In this course we will also use *autoplot()* which is a ggplot() for time series
 Many of the functions we will use require a time series object. You can transform your data in a time series using the function *ts()*. Only the columns with reservoir inflow data should be transformed, not the ones with month and year. Your ts object is not a data frame, but like I said we will need it as a ts for some function we will explore in future scripts.
 
 ```{r}
-ts_inflow_data <- #####
+ts_inflow_data <- ts(inflow_data[,2:4], start=c(1931,1),frequency=12) #we dont want the first column converted because its a date. speficying start for the monthly data, frequency is 12 because its monthly
 ts_inflow_data
 
 ```
@@ -116,8 +118,19 @@ Let's see the plots generated with *autoplot()*.
 autoplot(ts_inflow_data) +
   xlab("Time") +
   ylab("Inflow") +
+  labs(color="Reservoir") #plots all the HPs unlike what would show up in ggplot. use autplot for time series plots
+#if you only want one time series
+autoplot(ts_inflow_data[,1], series="HP1") +
+  xlab("Time") +
+  ylab("Inflow") +
   labs(color="Reservoir")
-  
+
+#if only want 2, need to use autolayering
+autoplot(ts_inflow_data[,1], series="HP1") +
+  autolayer(ts_inflow_data[,2], series="HP2")
+  xlab("Time") +
+  ylab("Inflow") +
+  labs(color="Reservoir")
 ```
 
 
@@ -127,16 +140,25 @@ There are multiple ways to get acf and pacf plots in R. The default package "sta
 
 ```{r acf}
 # Option 1: The function acf() and pacf() is from package "stats"
-HP1_acf=
+HP1_acf= acf(ts_inflow_data[,1], lag.max=40,plot=TRUE) #also a part of this function to do partials
+#the blue dashed lines are the confidence intervals, any lags between them can be considered 0 / not significant
+#also only goes to lag 5 but somehow that acually means 40... idk use the captial Acf function below instead.
 
-HP1_pacf=
+HP1_pacf= pacf(ts_inflow_data[,1], lag.max=40,plot=TRUE)
 
 #Option 2: Computing ACF and PACF with package "forecast"
 
 #The next line will output a plot since we have plot=TRUE and also store the acf values in the object
-HP1_acf=
+HP3_acf= Acf(ts_inflow_data[,3],lag.max=40,plot=TRUE) 
+#this Acf function omits lag 0 (which is always 1), luana likes this better because it doesnt have that and is less confusing. but basically the same otherwise
 
-HP1_pacf=
-  
+#third series have less of a negative lag. interesting.
+
+HP3_pacf= Pacf(ts_inflow_data[,3],lag.max=40,plot=TRUE)
+
+#lags fade away a lot quicker into the CI when you calculate the PACF. see lecture notes.
+
+HP3_acf$acf
+HP3_pacf$acf #these are called acf values for pacf but they ARE PACF values. not acf values, for each lag
 ```
 
