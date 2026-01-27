@@ -26,6 +26,7 @@ library(dplyr)
 library(forecast) 
 library(readxl)
 library(openxlsx)
+library(ggplot2)
 
 rm(list = ls())
 ```
@@ -55,6 +56,12 @@ head(energy_data1)
 You will work only with the following columns: Total Biomass Energy Production, Total Renewable Energy Production, Hydroelectric Power Consumption. Create a data frame structure with these three time series only. Use the command head() to verify your data.
 
 ```{r}
+#variables I want
+selected_vars <- energy_data1[,c("Month", "Total Biomass Energy Production", "Total Renewable Energy Production", "Hydroelectric Power Consumption")]
+
+#turn into a dataframe
+energy_df <- as.data.frame(selected_vars)
+head(energy_df)
 
 ```
 
@@ -63,7 +70,8 @@ You will work only with the following columns: Total Biomass Energy Production, 
 Transform your data frame in a time series object and specify the starting point and frequency of the time series using the function ts().
 
 ```{r}
-
+ts_energy <- ts(energy_df[,2:4], start=c(1973,1),frequency = 12)
+head(ts_energy)
 ```
 
 
@@ -71,6 +79,14 @@ Transform your data frame in a time series object and specify the starting point
 Compute mean and standard deviation for these three series.
 
 ```{r}
+#means
+mean(ts_energy[,1])
+mean(ts_energy[,2])
+mean(ts_energy[,3])
+#standard deviations
+sd(ts_energy[,1])
+sd(ts_energy[,2])
+sd(ts_energy[,3])
 
 ```
 
@@ -79,31 +95,65 @@ Compute mean and standard deviation for these three series.
 Display and interpret the time series plot for each of these variables. Try to make your plot as informative as possible by writing titles, labels, etc. For each plot add a horizontal line at the mean of each series in a different color.
 
 ```{r}
+#first plot
+autoplot(ts_energy[,1]) +
+  geom_hline(aes(yintercept =mean(ts_energy[,1]), linetype ="Mean Biomass Production"), color = "red")+
+  ggtitle("Biomass Time Series")+
+  xlab("Time") +
+  ylab("Total Biomass Energy Production")+
+  labs(linetype = "Legend")
+
+#second plot
+autoplot(ts_energy[,2]) +
+  geom_hline(aes(yintercept =mean(ts_energy[,2]), linetype= "Mean Renewable Energy Production"), color = "lightblue")+
+  ggtitle("Renewables Time Series")+
+  xlab("Time") +
+  ylab("Total Renewable Energy Production") +
+  labs(linetype = "Legend")
+
+#third plot
+autoplot(ts_energy[,3]) +
+  geom_hline(aes(yintercept =mean(ts_energy[,3]), linetype ="Mean Hydroelectric Consumption"), color="magenta")+
+  ggtitle("Hydroelectric Time Series")+
+  xlab("Time") +
+  ylab("Hydroelectric Power Consumption") +
+  labs(linetype = "Legend")
+
+#not sure how to add the mean lines in an easier way.. had to do a lot of internet searching to figure that out and maybe it should be simpler?
 
 ```
+The three time series look very different from each other over time.
+Biomass increases, somewhat linearly, but not linearly for a decade between 1990 - 2000.
+Renewable production has always increased but pretty much linearly so from 2000 onwards.
+The hydroelectric consumption is less easy to interpret. Seems to oscillate (maybe yearly high and low). seems to fluctuate over the entire time around the mean (unlike the other two series).
 
 
 ## Question 5
 Compute the correlation between these three series. Are they significantly correlated? Explain your answer.
 
 ```{r}
-
+#computing correlation with function cor()
+cor(ts_energy)
 ```
-
+The matrix shows the highest correlations with the same variable (as expected, 1 indicating perfectly correlated). The highest correlation is a positive correlation between biomass energy production and renewable energy production (0.96). The negatives indicate a negative correlation, but are all much closer to 0 (<|0.2|). This indicates that there is not a strong correlation for either of those correlated variables with hydroelectric power consumption. This makes sense visually based on the time series plots - hydroelectric plotted uniquely. 
 
 ## Question 6
 Compute the autocorrelation function from lag 1 up to lag 40 for these three variables. What can you say about these plots? Do the three of them have the same behavior?
 
 ```{r}
-
+Biomass_ACF= Acf(ts_energy[,1],lag.max=40,plot=TRUE) 
+Renewables_ACF=Acf(ts_energy[,2], lag.max=40, plot=TRUE)
+Hydroelectric_ACF = Acf(ts_energy[,3], lag.max=40, plot=TRUE)
 ```
-
+For biomass and renewables, Lags over time seem very similar very gradual drop-off toward insignificant. This likely indicates that past values of the time series' are correlated to future values. The hydroelectric ACF also gradually declines so past values likely also are correlated to future values but has a totally different shape. The hydroelectric has positive and negative lags, while the first two are all positive. Hydro likely is a seasonaly dependant variable while the other two time series are not seasonally dependant.
 
 ## Question 7
 Compute the partial autocorrelation function from lag 1 to lag 40 for these three variables. How these plots differ from the ones in Q6?
 
 ```{r}
-
+Biomass_PACF= Pacf(ts_energy[,1],lag.max=40,plot=TRUE) 
+Renewables_PACF=Pacf(ts_energy[,2], lag.max=40, plot=TRUE)
+Hydroelectric_PACF = Pacf(ts_energy[,3], lag.max=40, plot=TRUE)
 ```
 
-
+The PACF plots differ from the ACF plots in that PACF removes intermediate lag effects (direct relationship between Y and lag). Here we see much fewer significant lag terms. After the first few initial lags, both renewables and biomass energy have some significant negative lags (saw plotted earlier as periods where linear growth stalled out). Hydroelectric has more significant lags.

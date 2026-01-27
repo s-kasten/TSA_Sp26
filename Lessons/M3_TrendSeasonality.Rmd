@@ -1,6 +1,6 @@
 ---
 title: "M3: Class Exercise on Trend and Season"
-author: "Luana Lima"
+author: "sadie Kasten"
 output: pdf_document
 ---
 
@@ -120,7 +120,7 @@ head(ts_inflow_data,15)
 Let's use functions Acf() and Pacf() from package "forecast".
 
 ```{r acf}
-#Acf and Pacf for HP1
+#Acf and Pacf for HP1, for each value of i ACF and PACF is being plotted in the code below
 for(i in 1:nhydro){
   par(mfrow=c(1,2))  #place plot side by side
   Acf(ts_inflow_data[,i],lag.max=40,main=paste("Inflows HP",i,sep="")) 
@@ -137,20 +137,44 @@ Let's identify and remove trend component. You start by fitting a linear model t
 
 ```{r}
 #Create vector t
-
-
+t<- c(1:nobs)
+#choose one HP to work with
+iHP <- 4
 
 #Fit a linear trend to TS of iHP
+linear_trend_model <- lm(inflow_data[,iHP+1]~t)# plus one bc of date column in the data frame
+summary(linear_trend_model)
 
+#store reg coefficient
+beta0 <- as.numeric(linear_trend_model$coefficients[1]) # intercept
+
+beta1 <- as.numeric(linear_trend_model$coefficients[2]) # slope
+
+#visualization
+ggplot(inflow_data, aes(x=my_date, y=inflow_data[,iHP+1]))+
+  geom_line(color="blue")+
+  geom_smooth(method="lm", color="red")
 
 ```
+not a significant regression. no overall increasing or decreasing trend when iHP was 15
+it was sifniciant with HP 4. (by p value)
 
 
 ```{r}
 #remove the trend from series
+detrend_inflow_data <- inflow_data[,iHP+1] - (beta0 + beta1*t) #this is the equation of the red line
+class(detrend_inflow_data)
 
+#transform to ts
+ts_detrend_inflow <- ts(detrend_inflow_data,frequency = 12, start=c(1931,1))
 
+autoplot(ts_inflow_data[,iHP])+
+  autolayer(ts_detrend_inflow)
+#this does not look like hers! 
 
+par(mfrow=c(1,2))
+Acf(ts_inflow_data[,iHP], lag.max=40)
+Acf(ts_detrend_inflow, lag.max = 40)
 ```
 
 Note that blue line is our original series, red line is our trend, green line is our original series minus the trend or in other words the detrended series. And in orange is the trend line for the detrended series which has slope 0 meaning we were able to effectively eliminate the trend with a linear model.
