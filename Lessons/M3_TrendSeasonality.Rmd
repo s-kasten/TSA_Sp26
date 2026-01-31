@@ -109,7 +109,7 @@ Fixed!
 Many of the functions we will use require a time series object. You can transform your data in a time series using the function *ts()*. 
 
 ```{r}
-ts_inflow_data <- ts(inflow_data[,2:(2+nhydro-1)],frequency=12) 
+ts_inflow_data <- ts(inflow_data[,2:(2+nhydro-1)],start=c(1931,1),frequency=12) 
 #note that we are only transforming columns with inflow data, not the date columns  #start=my_date[1],end=my_date[nobs],
 head(ts_inflow_data,15)
 ```
@@ -139,7 +139,7 @@ Let's identify and remove trend component. You start by fitting a linear model t
 #Create vector t
 t<- c(1:nobs)
 #choose one HP to work with
-iHP <- 4
+iHP <- 3
 
 #Fit a linear trend to TS of iHP
 linear_trend_model <- lm(inflow_data[,iHP+1]~t)# plus one bc of date column in the data frame
@@ -186,6 +186,31 @@ Now let's shift attention to the seasonal component.
 
 ```{r}
 #Use seasonal means model
+dummies <- seasonaldummy(ts_detrend_inflow)
+
+seas_means_model <- lm(detrend_inflow_data~dummies)
+
+summary(seas_means_model)
+
+#store coeffs
+beta_intercept <- seas_means_model$coefficients[1]
+beta_coeff <- seas_means_model$coefficients[2:12]
+
+#compute seasonal component
+season_inflow_data <- array(0, nobs)
+for(i in 1:nobs)(
+ season_inflow_data[i] <- beta_intercept+beta_coeff%*%dummies[i,])
+
+#remove seasonal component
+deseason_inflow_data <- detrend_inflow_data - season_inflow_data
+
+#convert to obj
+ts_deseason_inflow_data <-ts(deseason_inflow_data,
+                            start=c(1931,1), frequency =12)
+
+#plots
+autoplot(ts_inflow_data[,iHP])+
+  autolayer(ts_deseason_inflow_data, series = "detrend and deseries inflow")
 
 
 ```
