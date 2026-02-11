@@ -1,0 +1,233 @@
+---
+title: "ENV 797 - Time Series Analysis for Energy and Environment Applications | Spring 2026"
+subtitle: "Assignment 4 - Due date 02/10/26"
+author: "Sadie Kasten"
+output: pdf_document
+geometry: margin=2.54cm
+editor_options: 
+  chunk_output_type: console
+---
+  
+## Directions
+  
+You should open the .rmd file corresponding to this assignment on RStudio. The file is available on our class repository on Github. And to do so you will need to fork our repository and link it to your RStudio.  
+
+Once you have the file open on your local machine the first thing you will do is rename the file such that it includes your first and last name (e.g., "LuanaLima_TSA_A04_Sp26.Rmd"). Then change "Student Name" on line 4 with your name. 
+
+Then you will start working through the assignment by  **creating code and output** that answer each question. Be sure to use this assignment document. Your report should contain the answer to each question and any plots/tables you obtained (when applicable).
+
+When you have completed the assignment, **Knit** the text and code into a single PDF file. Submit this pdf using Sakai. 
+
+R packages needed for this assignment: "xlsx" or "readxl", "ggplot2", "forecast","tseries", and "Kendall". Install these packages, if you haven't done yet. Do not forget to load them before running your script, since they are NOT default packages.\\
+
+```{r}
+rm(list = ls())
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+#Load/install required package here
+library(tseries)
+library(dplyr)
+library(forecast) 
+library(readxl)
+library(openxlsx)
+library(ggplot2)
+library(base)
+library(trend)
+library(Kendall)
+library(lubridate)
+```
+
+
+
+## Questions 
+
+Consider the same data you used for A3 from the spreadsheet "Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.xlsx". The data comes from the US Energy Information and Administration and corresponds to the December 2025 Monthly Energy Review. **For this assignment you will work only with the column "Total Renewable Energy Production"**. 
+
+```{r message=FALSE, warning=FALSE}
+#Importing data set - you may copy your code from A3
+
+#Importing data set without change the original file using read.xlsx
+energy_data1 <- read_excel(path="./Data/Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.xlsx",skip = 12, sheet="Monthly Data",col_names=FALSE) 
+
+#Now let's extract the column names from row 11
+read_col_names <- read_excel(path="./Data/Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.xlsx",skip = 10,n_max = 1, sheet="Monthly Data",col_names=FALSE) 
+colnames(energy_data1) <- read_col_names
+
+#variables I want
+selected_vars <- energy_data1[,c("Month", "Total Renewable Energy Production")]
+
+#turn into a dataframe
+new_df <- as.data.frame(selected_vars)
+head(new_df)
+
+#make original data into a time series
+tsdata <- ts(new_df[,-1], frequency = 12, start=c(1973,1))
+
+```
+
+
+## Stochastic Trend and Stationarity Tests
+
+For this part you will work only with the column Total Renewable Energy Production. 
+
+### Q1
+
+Difference the "Total Renewable Energy Production" series using function diff(). Function diff() is from package base and take three main arguments:
+* *x* vector containing values to be differenced;
+* *lag* integer indicating with lag to use;
+* *differences* integer indicating how many times series should be differenced.
+
+Try differencing at lag 1 only once, i.e., make `lag=1` and `differences=1`. Plot the differenced series. Do the series still seem to have trend?
+
+```{r}
+plot(tsdata)
+dif_ts <- diff(tsdata, lag=1, differences=1)
+#plot the differenced series
+plot(dif_ts)
+
+```
+
+The trend appears to be removed. Now the series is flat around 0 but still spiking in some manner, maybe seasonally. The series does still seem to grow over time.
+
+### Q2
+Copy and paste part of your code for A3 where you run the regression for Total Renewable Energy Production and subtract that from the original series. This should be the code for Q3 and Q4. make sure you use assign same name for the time series object that you had in A3, otherwise the code will not work.
+
+```{r}
+nobs <- nrow(energy_data1)
+#Create vector t
+t<- c(1:nobs)
+
+#Fit trend for Renewable Energy
+RE_linear_trend <- lm(new_df[,2]~t)# plus one bc of date column in the data frame
+summary(RE_linear_trend)
+
+#store coefficients
+RE_beta0 <- as.numeric(RE_linear_trend$coefficients[1]) # intercept
+RE_beta1 <- as.numeric(RE_linear_trend$coefficients[2]) # slope
+
+detrend_RE <- new_df[,2] - (RE_beta0 + RE_beta1*t) 
+#transform to ts
+ts_detrend_RE <- ts(detrend_RE,frequency = 12, start=c(1973,1))
+
+```
+
+### Q3
+Now let's compare the differenced series with the detrended series you calculated on A3. In other words, for the "Total Renewable Energy Production" compare the differenced series from Q1 with the series you detrended in Q2 using linear regression. 
+
+Using autoplot() + autolayer() create a plot that shows the three series together (i.e. "Original", "Differenced", "Detrended lm()"). Make sure your plot has a legend. The easiest way to do it is by adding the `series=` argument to each autoplot and autolayer function. Look at the key for A03 for an example on how to use autoplot() and autolayer(). 
+
+What can you tell from this plot? Which method seems to have been more efficient in removing the trend?
+
+```{r}
+autoplot(tsdata,series="Original") +
+  autolayer(ts_detrend_RE,series="Detrended") +
+  autolayer(dif_ts, series="Differenced") +
+  ylab("Energy [Trillion Btu]") +
+  ggtitle("Total Renewable Energy Production")
+```
+
+
+> Answer: The trend in the differenced data seems far more reduced than the detrended data. Detrending the data seemed to tilt but not actually remove the trend, whereas the differenced data does not have the same trend as the orignial or detrended data exhibit.
+
+### Q4
+Plot the ACF for the three series and compare the plots. Add the argument `ylim=c(-0.5,1)` to the autoplot() or Acf() function - whichever you are using to generate the plots - to make sure all three y axis have the same limits. Looking at the ACF which method do you think was more efficient in eliminating the trend? The linear regression or differencing?
+
+```{r}
+library(cowplot)
+```
+
+
+```{r}
+plot_grid(
+  autoplot(Acf(tsdata,lag.max=40,plot=FALSE),
+    main="Renewable Original", 
+    ylim=c(-0.5,1)), #ylim is used to set the y axis limits
+  autoplot(Acf(ts_detrend_RE,lag.max=40,plot=FALSE),
+    main="Renewable Detrended",
+    ylim=c(-0.5,1)),
+  autoplot(Acf(dif_ts,lag.max=40,plot=FALSE),
+    main="Renewable Differenced",
+    ylim=c(-0.5,1))
+)
+
+```
+
+> Answer: Looking at the three plots, it looks like differencing did the best at eliminating the trend. The linear regression is barely different than the origianl series ACF, the trend is not removed. 
+
+### Q5
+Compute the Seasonal Mann-Kendall and ADF Test for the original "Total Renewable Energy Production" series. Ask R to print the results. Interpret the results for both test. What is the conclusion from the Seasonal Mann Kendall test? What's the conclusion for the ADF test? Do they match what you observed in Q3 plot? Recall that having a unit root means the series has a stochastic trend. And when a series has stochastic trend we need to use differencing to remove the trend.
+
+```{r}
+#Seasonal Mann-Kendall
+SMKtest <- SeasonalMannKendall(tsdata)
+print("Results for Seasonal Mann Kendall /n")
+print(summary(SMKtest))
+```
+
+```{r}
+#ADF Test
+#Null hypothesis is that data has a unit root
+print("Results for ADF test/n")
+print(adf.test(tsdata,alternative = "stationary"))
+```
+
+
+
+> Answer: The Mann-Kendall test result provides strong evidence to reject the null hypothesis that there is no trend, and support the alternative hypothesis that there is a trend in the original data. The ADF test has a high p-value of 0.9347, this means I cannot reject the null hypothesis that the data has a unit root and is non-stationary. This means that the series likely has a stochastic trend. This matches my plots from Q3 - where I needed to difference to remove the trend. 
+
+### Q6
+Aggregate the original "Total Renewable Energy Production" series by year. You can use the same procedure we used in class. Store series in a matrix where rows represent months and columns represent years. And then take the columns mean using function colMeans(). Recall the goal is the remove the seasonal variation from the series to check for trend. Convert the accumulates yearly series into a time series object and plot the series using autoplot().
+
+```{r}
+#Group data in yearly steps instances
+data_matrix <- matrix(tsdata,byrow=FALSE,nrow=12)
+means_yearly <- colMeans(data_matrix)
+
+my_year <- c(year(first(new_df$Month)):year(last(new_df$Month)))
+#data frame with yearly means
+data_yearly <- data.frame(my_year, means_yearly)
+
+#create a time series of yearly means, note to self: the -1 is removing the garbage column creating a timeseries tries to add in, leaving only the data
+yearly_ts <- ts(data_yearly[,-1],frequency = 1, start=c(1973))
+
+```
+
+
+```{r}
+autoplot(yearly_ts,series="Yearly Renewable Means") +
+  ylab("Energy [Trillion Btu]") +
+  ggtitle("Total Renewable Energy Production")
+
+```
+
+### Q7
+Apply the Mann Kendall, Spearman correlation rank test and ADF. Are the results from the test in agreement with the test results for the monthly series, i.e., results for Q5?
+
+```{r}
+#Seasonal Mann-Kendall
+SMKtest2 <- SeasonalMannKendall(yearly_ts)
+print("Results for Seasonal Mann Kendall /n")
+print(summary(SMKtest2))
+```
+
+p value of <0.05 by far
+```{r}
+#Spearman Correlation Test
+print("Results from Spearman Correlation")
+sp_rho=cor.test(yearly_ts,my_year,method="spearman")
+print(sp_rho)
+```
+
+same p value result as mann-kendall
+```{r}
+#ADF Test
+#Null hypothesis is that data has a unit root
+print("Results for ADF test/n")
+print(adf.test(yearly_ts,alternative = "stationary"))
+```
+
+p value = 0.7037
+> Answer: Yes, both spearman and mann-kendall provide evidence to reject the null, indicating there is a trend and the p-value in the ADF test is still >0.05 indicating there is a unit root/stochastic trend. This does match my Q5 answers still.
