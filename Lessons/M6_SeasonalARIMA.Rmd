@@ -167,7 +167,7 @@ cat("Number of seasonal differencing needed: ",ns_diff)
 
 #Lets difference the series once at lag 12 to remove the seasonal trend.
 residential_price_seas_diff <- diff(ts_electricity_price[,"Residential"],lag=12, differences=1)
-residential_price_trend_diff <- diff(ts_electricity_price[,"Residential"],lag =1, differences=1) #diff done on orig series
+residential_price_trend_diff <- diff(ts_electricity_price[,"Residential"],lag =1, differences=1) #diff done on orig series - differencing at the trend level
 residential_price_both_diff <- diff(residential_price_trend_diff,lag =12, differences=1)
 
 #Check autocorrelation plots for differenced series
@@ -205,6 +205,8 @@ plot_grid(
            ylim=c(-1,1)),
   nrow=2,ncol=2
 )
+# seasonality showing up now in the seasonal differenced PACF, shows might need a seasonal moving average?
+
 
 #Plot ACF and PACF for twice-differenced series - Steps 3 (order of non-seasonal) and 5 ) order of seasonal
 plot_grid(
@@ -215,6 +217,8 @@ plot_grid(
   nrow=1,ncol=2
 )
 
+#want the twice-differenced one in this case. still something happening at lag 12 in the ACF plots.
+#see one spike in the ACF and multiple in the PACF, so the seasonal component is (0,1,1) the normal trend much harder to tell could try (011) or (111) and see what works best, or even (010). the non seasonal component is harder to get from the plots - why theres many more options to test.
 ```
 
 Look at the twice differenced series to identify model order. 
@@ -223,17 +227,26 @@ Look at the twice differenced series to identify model order.
 ## Manually fitting seasonal ARIMA to original series
 
 ```{r}
+Model_1 <- Arima(ts_electricity_price[,"Residential"],order=c(0,1,1), seasonal=c(0,1,1), include.drift=TRUE)
+print(Model_1)
 
+checkresiduals(Model_1)
+compare_aic <- data.frame(Model_1$aic)
 
+Model_2 <- Arima(ts_electricity_price[,"Residential"],order=c(1,1,1), seasonal=c(0,1,1), include.drift=TRUE)
+print(Model_2)
+
+checkresiduals(Model_2)
+compare_aic <- data.frame(compare_aic, Model_2$aic)
 
 ```
 
 ## Automatically fitting seasonal ARIMA to original series
 
 ```{r}
+Model_auto <- auto.arima(ts_electricity_price[,"Residential"], approximation = TRUE)
 
-
-
+print(Model_auto)
 
 ```
 
@@ -243,9 +256,14 @@ Look at the twice differenced series to identify model order.
 Recall from M6 that the best fit for the non-seasonal time series is a ARIMA(1,1,2) with drift.
 
 ```{r}
-
-
+Model_auto_unseas <- auto.arima(deseasonal_residential_price, max.D =0, max.P = 0, max.Q = 0, approximation = TRUE)
+print(Model_auto_unseas)
 
 ```
 
 ## Discussion: Which one to do? ARIMA or SARIMA?
+not sure... originally i am guessing a SARIMA on the original series. Majority of class agrees. Which is the correct answer according to Luana. (even tho the lower AIC was on the auto fit ARIMA on deseasonal series. But these are not comparable. Do NOT compare like this, logically they are not comparable)
+
+removing it first considers it constant, not taking it out gives it stochasticity which is more useful in forecasting.
+
+
