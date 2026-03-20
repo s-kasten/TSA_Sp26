@@ -1,0 +1,273 @@
+---
+title: "ENV 797 - Time Series Analysis for Energy and Environment Applications | Spring 2026"
+subtitle: "Assignment 7 - Due date 03/06/26"
+author: "Sadie Kasten"
+output: pdf_document
+geometry: margin=2.54cm
+---
+
+## Directions
+
+You should open the .rmd file corresponding to this assignment on RStudio. The file is available on our class repository on Github. And to do so you will need to fork our repository and link it to your RStudio.  
+
+Once you have the file open on your local machine the first thing you will do is rename the file such that it includes your first and last name (e.g., "LuanaLima_TSA_A07_Sp26.Rmd"). Then change "Student Name" on line 4 with your name. 
+
+Then you will start working through the assignment by  **creating code and output** that answer each question. Be sure to use this assignment document. Your report should contain the answer to each question and any plots/tables you obtained (when applicable).
+
+When you have completed the assignment, **Knit** the text and code into a single PDF file. Submit this pdf using Sakai. 
+
+Packages needed for this assignment: "forecast","tseries". Do not forget to load them before running your script, since they are NOT default packages.\\
+
+## Set up
+
+```{r}
+#Load/install required package here
+library(forecast)
+library(tseries)
+library(ggplot2)
+library(sarima)
+library(tidyverse)
+library(Kendall)
+library(cowplot)
+```
+
+## Importing and processing the data set
+
+Consider the data from the file "Net_generation_United_States_all_sectors_monthly.csv". The data corresponds to the monthly net generation from January 2001 to December 2020 by source and is provided by the US Energy Information and Administration. **You will work with the natural gas column only**.
+
+
+### Q1
+
+Import the csv file and create a time series object for natural gas. Make you sure you specify the **start=** and **frequency=** arguments. Plot the time series over time, ACF and PACF.
+
+```{r}
+#Importing time series data from text file#
+natgas_gen <- read.csv(file="./Data/Net_generation_United_States_all_sectors_monthly.csv",sep = ",",skip=4)
+
+head(natgas_gen)
+nobs <- nrow(natgas_gen)
+
+#Initial data prep for natural gas
+natgas_gen_processed <-
+  natgas_gen %>%
+  mutate( Month = my(Month) ) %>% 
+  rename(Nat.Gas = natural.gas.thousand.megawatthours) %>% 
+  arrange( Month )
+
+head(natgas_gen_processed)
+
+```
+
+
+```{r}
+#create a time series object for natural gas. 
+
+ts_natgas <- ts(natgas_gen_processed[,"Nat.Gas"],
+                           start=c(year(natgas_gen_processed$Month[1]),month(natgas_gen_processed$Month[1])),
+                           frequency=12) 
+ 
+head(ts_natgas)
+tail(ts_natgas)
+```
+
+```{r}
+#Plot the time series over time, ACF and PACF.
+autoplot(ts_natgas)+
+  labs(title ="Natural gas generation over time")
+
+ACF_Plot <- Acf(ts_natgas, lag = 40, plot = TRUE)
+PACF_Plot <- Pacf(ts_natgas, lag = 40)
+
+```
+
+
+
+### Q2
+
+Using the $decompose()$ and the $seasadj()$ functions create a series without the seasonal component, i.e., a deseasonalized natural gas series. Plot the deseasonalized series over time and corresponding ACF and PACF. Compare with the plots obtained in Q1.
+
+```{r}
+decompose_natgas <- decompose(ts_natgas,"additive")
+#using additive as magnitude does not seem to be increasing with trend in the original series plotted above.
+
+#non-seasonal time series
+deseasonal_natgas <- seasadj(decompose_natgas)
+
+autoplot(deseasonal_natgas)+
+  labs(title = "Deseasonalized Natural Gas Generation over time")
+ACF_Plot <- Acf(deseasonal_natgas, lag = 40)
+PACF_Plot <- Pacf(deseasonal_natgas, lag = 40)
+
+
+```
+
+
+Compared with the plots in Question 1, these plots clearly have the seasonal component removed. The trend component is still obvious in the plotted trend and ACF graphs, but the seasonality has been taken out.
+
+
+## Modeling the seasonally adjusted (i.e., the deseasonalized series)
+
+### Q3
+
+Run the ADF test and Mann Kendall test on the deseasonalized data from Q2. Report and explain the results.
+
+```{r}
+#Run ADF
+print((adf.test(deseasonal_natgas,alternative="stationary")))
+
+#Run Mann Kendall
+print("Results of Mann Kendall on deseasonalized NatGas generation data")
+print(summary(MannKendall(deseasonal_natgas)))
+
+
+```
+
+The results of the ADF test, indicate a p-value less than 0.05 (0.01), which supplies evidence to reject the null hypothesis that there is a unit root. It appears the test is indicating to accept the alternative that there is stationarity - however from the plot I can see there is a trend. I did some internet searching and apparently this result is possible if my time series is trend stationary (straight line trend) - this would seem to be accurate, if true.
+
+The results of the Mann-Kendall test, the positive tau value indicates a positive trend and the p-value being much less than 0.5 (=<2.22e-16), which provides evidence to Reject the null hypothesis and indicate the trend is statistically significant.
+
+
+### Q4
+
+Using the plots from Q2 and test results from Q3 identify the ARIMA model parameters $p,d$ and $q$. Note that in this case because you removed the seasonal component prior to identifying the model you don't need to worry about seasonal component. Clearly state your criteria and any additional function in R you might use. DO NOT use the $auto.arima()$ function. You will be evaluated on ability to understand the ACF/PACF plots and interpret the test results.
+
+```{r}
+#first I need to remove the trend, to look at my plots. I already know I need to difference the series.
+deseasonal_diff_natgas<- diff(deseasonal_natgas,differences=1)
+
+#Comparing new plots
+autoplot(deseasonal_diff_natgas)+
+  labs(title = "Deseasoned and Differenced Natural Gas Generation over time")
+ACF_Plot <- Acf(deseasonal_diff_natgas, lag = 40)
+PACF_Plot <- Pacf(deseasonal_diff_natgas, lag = 40)
+```
+
+Based on the plots from Question 2, there is one significant lag and an obvious positive trend. In this case, we should difference because there is still a trend that we need to remove, therefore d=1. Plotting the differenced graphs is not helpful, I dont see trailing off pr cut offs in either the ACF or PACF to indicate orders for p and q. I am going to try a few models and see what has the lowest aic as I am confused by my new plots.
+
+```{r}
+#ARIMA(1,1,1) 
+Model_111 <- Arima(deseasonal_natgas,order=c(1,1,1),include.drift=TRUE)
+compare_aic <- data.frame(Model_111$aic) 
+
+Model_011 <- Arima(deseasonal_natgas,order=c(0,1,1),include.drift=TRUE)
+compare_aic <- data.frame(compare_aic,Model_011$aic)
+
+Model_110 <- Arima(deseasonal_natgas,order=c(1,1,0),include.drift=TRUE)
+compare_aic <- data.frame(compare_aic,Model_110$aic)
+
+Model_010 <- Arima(deseasonal_natgas,order=c(0,1,0),include.drift=TRUE)
+compare_aic <- data.frame(compare_aic,Model_010$aic)
+
+print(compare_aic)
+```
+
+
+I have a low p-value with the first model (ARIMA 111) on the Ljung-Box tests which indicates its not a great fit and I have statistically significant residuals. I consequently compared models but it seems that this model is actually the best based on AIC (lowest). This means that I will accept that ARIMA 111 as my best model. I do not believe I need any second order coefficients based on the fact I did not even see a pattern to discern AR or MA after I detrended - going up in order would not seem to be a correct path.
+
+
+### Q5
+
+Use `Arima()` from package "forecast" to fit an ARIMA model to your series considering the order estimated in Q4. You should allow constants in the model, i.e., `include.mean = TRUE` or `include.drift=TRUE`. **Print the coefficients** in your report. Hint: use the `cat()` or `print()` function to print.
+
+```{r}
+Natgas_Model <- Arima(deseasonal_natgas, order=c(1,1,1), include.mean = T, include.drift=T)
+print(Natgas_Model)
+```
+
+### Q6
+
+Now plot the residuals of the ARIMA fit from Q5 along with residuals ACF on the same window. You may use the $checkresiduals()$ function to get the plots. Do the residual series look like a white noise series? Why?
+
+```{r}
+checkresiduals(Natgas_Model)
+```
+
+It does look like numbers cycling about 0, none of the residuals are significant (some only slightly) so I dont think I can say much about the ACF. The distribution looks mostly normal which should make sense if I have de-seasoned and de-trended my data. 
+
+## Modeling the original series (with seasonality)
+
+### Q7
+
+Repeat Q3-Q6 for the original series (the complete series that has the seasonal component). Note that when you model the seasonal series, you need to specify the seasonal part of the ARIMA model as well, i.e., $P$, $D$ and $Q$.
+
+```{r}
+#Run ADF
+print((adf.test(ts_natgas,alternative="stationary")))
+
+#Run Mann Kendall
+print("Results of Mann Kendall on deseasonalized NatGas generation data")
+print(SeasonalMannKendall(ts_natgas))
+
+```
+
+I have the same results for the ADF test as prior, additionally I also have a positive tau result and low (<0.05) p-value result from the seasonal mann kendall test (which also matches my results from prior). This makes sense as with the seasonal mann kendall test I am basically looking at the same data.
+
+```{r}
+ns_diff <- nsdiffs(ts_natgas)
+cat("Number of seasonal differencing needed: ",ns_diff)
+```
+
+```{r}
+#difference the series once at lag 12 to remove the seasonal trend and normally to compare.
+seas_diff_ng <- diff(ts_natgas,lag=12, differences=1)
+trend_diff_ng <- diff(ts_natgas,lag =1, differences=1) 
+both_diff_ng <- diff(trend_diff_ng,lag =12, differences=1)
+
+
+plot_grid(
+  autoplot(Acf(both_diff_ng,lag.max=60,plot=FALSE),
+           main="Twice-Differenced NG",ylim=c(-1,1)),
+  autoplot(Pacf(both_diff_ng,lag.max=60,plot=FALSE),
+           main="Twice-Differenced NG",ylim=c(-1,1)),
+  nrow=1,ncol=2)
+```
+
+
+
+Now I need to decide on an ARIMA model, know that D=1 from my test earlier, the twice differenced graphs for ACF and PACF are telling me nothing - they look identical. The first few lags look like nothing so I might try p=1 and q=1 since I cant tell if its AR MA or neither. The spike at 12 months is followed by some (?) decay on the PACF, and only a sharp 12 month spike on the ACF - this might indicate that P=0 and Q=1 if its a seasonally moving average process.
+
+
+
+```{r}
+Natgas_Model2 <- Arima(ts_natgas, order=c(1,0,1), seasonal= c(0,1,1),include.mean = T)
+print(Natgas_Model2)
+```
+
+```{r}
+checkresiduals(Natgas_Model2)
+```
+
+
+
+### Q8
+
+Compare the residual series for Q7 and Q6. Can you tell which ARIMA model is better representing the Natural Gas Series? Is that a fair comparison? Explain your response.
+
+Between my two residual series, I have a pretty random residual second ARIMA model. It has a lower AIC value but I dont believe these are comparable because the data sets are totally different. My attempt in the second model may be better because the model is working with all the data at once but they arent really fair to compare for the same reason.
+
+## Checking your model with the auto.arima()
+
+**Please** do not change your answers for Q4 and Q7 after you ran the $auto.arima()$. It is **ok** if you didn't get all orders correctly. You will not lose points for not having the same order as the $auto.arima()$.
+
+### Q9
+
+Use the $auto.arima()$ command on the **deseasonalized series** to let R choose the model parameter for you. What's the order of the best ARIMA model? Does it match what you specified in Q4?
+
+```{r}
+auto.arima(deseasonal_natgas)
+```
+
+
+The best order is ARIMA(1,1,1) which is what I put for Q4, but I really had no strong indicators except comparing AIC's to pick that so I'm not sure I was very confident in my original answer to begin with - I might have just been lucky.
+
+
+### Q10
+
+Use the $auto.arima()$ command on the **original series** to let R choose the model parameters for you. Does it match what you specified in Q7?
+
+```{r}
+auto.arima(ts_natgas)
+```
+
+
+The SARIMA model best result was SARIMA(1,0,0)(0,1,1) which is not what I got but I got the same P D Q values which was nice since that is the only part I had a strong idea for. The decision on p and q was too tricky to decide based on no evidence so I dont feel like I missed anything.

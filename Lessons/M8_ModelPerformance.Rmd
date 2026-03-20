@@ -122,6 +122,7 @@ On "M7_Intro_Forecasting.Rmd" we tried several models for both seasonal and dese
 
 ```{r}
 MEAN_seas <- meanf(y = ts_electricity_price[,"All.sectors"], h = 12)
+summary(MEAN_seas)
 checkresiduals(MEAN_seas)
 ```
 
@@ -131,6 +132,7 @@ checkresiduals(MEAN_seas)
 
 ```{r}
 SNAIVE_seas <- snaive(ts_electricity_price[,"All.sectors"], h=12)
+summary(SNAIVE_seas)
 checkresiduals(SNAIVE_seas)
 ```
 
@@ -139,6 +141,7 @@ checkresiduals(SNAIVE_seas)
 ### Model 3: SARIMA
 ```{r}
 SARIMA_autofit <- auto.arima(ts_electricity_price[,"All.sectors"])
+summary(SARIMA_autofit)
 checkresiduals(SARIMA_autofit)
 ```
 
@@ -153,7 +156,7 @@ We are done with backward-looking assessment. SARIMA seems to be a good fit for 
 
 The function accuracy() will return performance measures. It takes the main arguments:
 
-**object** object of class forecast, or numerical values containing forecasts. **x** numerical vector containing observed values (optional).
+**object** object of class forecast, or numerical values containing forecasts. **x** numerical vector containing observed values (optional). (the arithmatic and naive outputs are the correct class but ARIMA is not (Since it doesnt forecast) and we will have to follow some steps to make it).
 
 If **x** is not provided the function will return performance measures for trainign set, i.e., based on historical data it will compare observed and fitted values.
 
@@ -176,7 +179,7 @@ $MAPE = \sum|Actual - Forecast|/Actual/n*100$
 ### Checking accuracy of the three models
 
 ```{r}
-observed <- electricity_price_processed[(nobs-n_for+1):nobs, "All.sectors"]
+observed <- electricity_price_processed[(nobs-n_for+1):nobs, "All.sectors"] #last 12 values for the observations that were left out of the time series originally.
 #Model 1: Arithmetic mean
 MEAN_scores <- accuracy(MEAN_seas$mean,observed)  #store the performance metrics
 plot(MEAN_seas)  #plot forecasts
@@ -187,7 +190,7 @@ plot(SNAIVE_seas)
 
 # Model 3:  SARIMA 
 #remember auto.arima does not call the forecast() internally so we need one more step
-SARIMA_for <- forecast(SARIMA_autofit,h=12)
+SARIMA_for <- forecast(SARIMA_autofit,h=12) #created a class forecast for the SARIMA fit - on the model not the time series, and specify the forecasting horizon
 SARIMA_scores <- accuracy(SARIMA_for$mean,observed)
 plot(SARIMA_for)
 
@@ -225,6 +228,17 @@ kbl(seas_scores,
 Create a code that plots all forecasted values and observed values together.
 
 ```{r}
+ts_electricity_price_full <- ts(
+  electricity_price_processed[1:nobs,"All_sectors"],
+  start=c(year(electricity_price_processed$Month[1]),month(electricity_price_processed$Month[1])),
+  frequency=12) 
+
+autoplot(ts_electricity_price_full)+
+  autolayer(MEAN_seas, series= "Mean", PI=FALSE)+
+  autolayer(SNAIVE_seas, series = "Seasonal Naive", PI=FALSE)+
+  autolayer(SARIMA_for, series = "SARIMA", PI = FALSE)
+
+
 
 
 ```
